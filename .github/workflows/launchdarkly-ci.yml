@@ -1,0 +1,87 @@
+name: LaunchDarkly-CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+
+env:
+  # Azure DevOps BuildConfiguration -> GitHub Actions build configuration
+  BUILD_CONFIGURATION: Release
+
+  # Azure DevOps variables used in the pipeline JSON
+  # (These were referenced as $(Parameters.RestoreBuildProjects) / $(Parameters.TestProjects))
+  # Replace with your actual glob(s) or project paths.
+  RESTORE_BUILD_PROJECTS: "**/*.csproj"
+  TEST_PROJECTS: "**/*Tests*.csproj"
+
+jobs:
+  build-test-publish:
+    name: Agent job 1
+    runs-on: windows-2019
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Azure DevOps step: "PowerShell Script" (dotnet-install.ps1)
+      # Note: The original script installs .NET SDK 2.0.0 into C:\Program Files\dotnet\
+      # GitHub-hosted runners may not support installing such an old SDK reliably.
+      # If you truly need .NET SDK 2.0.0, keep this step; otherwise update to a supported SDK.
+      - name: Install .NET SDK 2.0.0 (x64)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dotnetInstall = Join-Path $env:RUNNER_TEMP "dotnet-install.ps1"
+          Invoke-WebRequest -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile $dotnetInstall
+
+          & $dotnetInstall -Architecture x64 -InstallDir "C:\Program Files\dotnet\" -Runtime dotnet -Version 2.0.0
+
+          # Ensure dotnet is on PATH for subsequent steps
+          $env:PATH = "C:\Program Files\dotnet\" + ";" + $env:PATH
+          dotnet --info
+
+      - name: Restore
+        shell: pwsh
+        run: |
+          dotnet restore "${{ env.RESTORE_BUILD_PROJECTS }}" --verbosity detailed
+
+      - name: Build
+        shell: pwsh
+        run: |
+          dotnet build "${{ env.RESTORE_BUILD_PROJECTS }}" --configuration "${{ env.BUILD_CONFIGURATION }}"
+
+      - name: Test
+        shell: pwsh
+        run: |
+          dotnet test "${{ env.TEST_PROJECTS }}" --configuration "${{ env.BUILD_CONFIGURATION }}" --verbosity normal
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          $artifactStaging = "${{ github.workspace }}\artifactstaging"
+          New-Item -ItemType Directory -Force -Path $artifactStaging | Out-Null
+
+          dotnet publish "${{ env.RESTORE_BUILD_PROJECTS }}" `
+            --configuration "${{ env.BUILD_CONFIGURATION }}" `
+            --output $artifactStaging
+
+      - name: Copy arm templates (Environment)
+        shell: pwsh
+        run: |
+          $sourceFolder = Join-Path $env:BUILD_SOURCESDIRECTORY "Environment"
+          $targetFolder = Join-Path ${{ github.workspace }} "artifactstaging\Environment"
+
+          if (Test-Path $sourceFolder) {
+            New-Item -ItemType Directory -Force -Path $targetFolder | Out-Null
+            Copy-Item -Path (Join-Path $sourceFolder "*") -Destination $targetFolder -Recurse -Force
+          } else {
+            Write-Host "Environment folder not found at $sourceFolder. Skipping copy."
+          }
+
+      - name: Publish Artifact (drop) to GitHub Actions artifact store
+        uses: actions/upload-artifact@v4
+        with:
+          name: drop
+          path: ${{ github.workspace }}\artifactstaging
+          if-no-files-found: error

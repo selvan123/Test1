@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # If your repo uses global.json, setup-dotnet will pick it up automatically.
+          # Otherwise, set a fixed version here (e.g., '8.0.x').
+          dotnet-version: |
+            8.0.x
+
+      - name: Build (Release)
+        run: dotnet build --configuration Release
+
+      - name: Publish (zip)
+        run: |
+          dotnet publish --configuration Release --output ./publish
+          # Create a zip similar to Azure's zipAfterPublish behavior
+          cd publish
+          zip -r ../publish.zip .
+          cd ..

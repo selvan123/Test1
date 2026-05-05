@@ -2,30 +2,39 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "**" ]
+  pull_request:
+
+env:
+  # Equivalent to $(buildConfiguration) in Azure DevOps.
+  # If your Azure pipeline sets this elsewhere, replace with the same value (e.g., Release).
+  buildConfiguration: Release
 
 jobs:
-  build:
+  build-test:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET
+      - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          # If your repo uses global.json, setup-dotnet will pick it up automatically.
-          # Otherwise, set a fixed version here (e.g., '8.0.x').
-          dotnet-version: |
-            8.0.x
+          dotnet-version: '8.x'
 
-      - name: Build (Release)
-        run: dotnet build --configuration Release
+      - name: Restore packages
+        run: dotnet restore
 
-      - name: Publish (zip)
-        run: |
-          dotnet publish --configuration Release --output ./publish
-          # Create a zip similar to Azure's zipAfterPublish behavior
-          cd publish
-          zip -r ../publish.zip .
-          cd ..
+      - name: Build solution
+        env:
+          # Azure: APP_SECRET_KEY: $(my-secret-var-name)
+          # GitHub: map secret to secrets.MY_SECRET_VAR_NAME
+          APP_SECRET_KEY: ${{ secrets.MY_SECRET_VAR_NAME }}
+        run: dotnet build --configuration ${{ env.buildConfiguration }}
+
+      - name: Run tests
+        env:
+          # Azure: DB_CONNECTION_STRING: $(my-db-conn-secret)
+          DB_CONNECTION_STRING: ${{ secrets.MY_DB_CONN_SECRET }}
+        run: dotnet test --configuration ${{ env.buildConfiguration }} --no-build

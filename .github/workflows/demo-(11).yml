@@ -1,0 +1,24 @@
+name: Demo (11)
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifactid:
+        description: "Artifact ID"
+        required: false
+        default: "100"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (disabled)
+        run: echo "checkout: none (intentionally not checking out repository)"
+
+      - name: Param value
+        run: echo "Param value ${{ inputs.artifactid }}"
+
+      - name: Run a multi-line script
+        run: |
+          echo "Add other tasks to build, test, and deploy your project."
+          echo "See https://aka.ms/yaml"

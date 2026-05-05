@@ -1,0 +1,42 @@
+name: Demo (13)
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  add-and-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Needed so the workflow can push back to the repo
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Add and Commit New File
+        run: |
+          set -euo pipefail
+
+          echo "Creating new file..."
+          echo "This is a new file added by the pipeline." > newfile.txt
+
+          echo "Setting Git identity..."
+          git config --global user.name "Pipeline Bot"
+          git config --global user.email "pipelinebot@example.com"
+
+          echo "Adding and committing changes..."
+          git add newfile.txt
+          # Avoid failing if the file already exists with identical content
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Add new file via pipeline"
+
+          echo "Pushing to repo..."
+          git push origin HEAD:refs/heads/main

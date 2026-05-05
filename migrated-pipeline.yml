@@ -1,26 +1,24 @@
-name: Demo
+name: Demo (11)
 
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      artifactid:
+        description: "Artifact ID"
+        required: false
+        default: "100"
 
 jobs:
-  A:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Echo
-        run: echo "ABCD"
+      - name: Checkout (disabled)
+        run: echo "checkout: none (intentionally not checking out repository)"
 
-  B:
-    # Azure DevOps used `pool: server` (no agent). GitHub Actions always runs on a runner,
-    # so we use ubuntu-latest as the closest equivalent.
-    runs-on: ubuntu-latest
-    steps:
-      - name: Splunk Observability Cloud Events
-        uses: Splunk/splunk-otel-collector-github-action@v1
-        with:
-          # NOTE: The Azure DevOps task inputs are mapped as closely as possible.
-          # If the GitHub Action input names differ, adjust accordingly.
-          splunk-events-api: ${{ secrets.SplunkConn }}
-          environment: production
-          eventType: New Azure DevOps deployment of test-the-tools
+      - name: Param value
+        run: echo "Param value ${{ inputs.artifactid }}"
+
+      - name: Run a multi-line script
+        run: |
+          echo "Add other tasks to build, test, and deploy your project."
+          echo "See https://aka.ms/yaml"

@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+
+env:
+  # Equivalent to $(buildConfiguration) in Azure DevOps.
+  # If your Azure pipeline sets this elsewhere, replace with the same value (e.g., Release).
+  buildConfiguration: Release
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Restore packages
+        run: dotnet restore
+
+      - name: Build solution
+        env:
+          # Azure: APP_SECRET_KEY: $(my-secret-var-name)
+          # GitHub: map secret to secrets.MY_SECRET_VAR_NAME
+          APP_SECRET_KEY: ${{ secrets.MY_SECRET_VAR_NAME }}
+        run: dotnet build --configuration ${{ env.buildConfiguration }}
+
+      - name: Run tests
+        env:
+          # Azure: DB_CONNECTION_STRING: $(my-db-conn-secret)
+          DB_CONNECTION_STRING: ${{ secrets.MY_DB_CONN_SECRET }}
+        run: dotnet test --configuration ${{ env.buildConfiguration }} --no-build

@@ -1,0 +1,24 @@
+name: Demo
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  A:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo
+        run: echo "ABCD"
+
+  B:
+    # Azure DevOps used `pool: server` (no agent). GitHub Actions always runs on a runner,
+    # so we use ubuntu-latest as the closest equivalent.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Splunk Observability Cloud Events
+        uses: Splunk/splunk-observability-cloud-events-action@v0
+        with:
+          splunk-events-api: ${{ secrets.SplunkConn }}
+          environment: production
+          eventType: New Azure DevOps deployment of test-the-tools

@@ -1,24 +1,43 @@
-name: Demo (11)
+name: Demo (13)
 
 on:
-  workflow_dispatch:
-    inputs:
-      artifactid:
-        description: "Artifact ID"
-        required: false
-        default: "100"
+  push:
+    branches: [ main ]
 
 jobs:
-  build:
+  add-and-commit:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
-      - name: Checkout (none)
-        run: echo "Skipping checkout (Azure pipeline had: checkout: none)"
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Needed so the workflow can push back to the repo
+          persist-credentials: true
 
-      - name: Param value
-        run: echo "Param value ${{ inputs.artifactid }}"
-
-      - name: Run a multi-line script
+      - name: Add and Commit New File
         run: |
-          echo "Add other tasks to build, test, and deploy your project."
-          echo "See https://aka.ms/yaml"
+          set -euo pipefail
+
+          echo "Creating new file..."
+          echo "This is a new file added by the pipeline." > newfile.txt
+
+          echo "Setting Git identity..."
+          git config --global user.name "Pipeline Bot"
+          git config --global user.email "pipelinebot@example.com"
+
+          echo "Adding and committing changes..."
+          git add newfile.txt
+
+          # Avoid failing if the commit would be empty (e.g., reruns)
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Add new file via pipeline"
+
+          echo "Pushing to repo..."
+          git push origin HEAD:main

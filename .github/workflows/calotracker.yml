@@ -1,0 +1,60 @@
+name: calotracker CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      DOCKER_IMAGE: yashtnaik/calotracker
+      IMAGE_TAG: v1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Equivalent to: git branch: 'main', url: 'https://github.com/yashtnaik/calotracker.git'
+          ref: main
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build with Docker Compose
+        run: |
+          sudo docker compose build
+          sudo docker tag calotracker-2-calotracker:latest "${DOCKER_IMAGE}:${IMAGE_TAG}"
+          sudo docker rmi calotracker-2-calotracker
+
+      - name: Push to DockerHub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USR }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PSW }}
+        run: |
+          echo "${DOCKERHUB_PASSWORD}" | sudo docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+          sudo docker push "${DOCKER_IMAGE}:${IMAGE_TAG}"
+
+      - name: Update deployment.yaml and push to main
+        env:
+          GIT_USERNAME: ${{ secrets.GITHUB_USR }}
+          GIT_PASSWORD: ${{ secrets.GITHUB_PSW }}
+        run: |
+          sudo sed -i 's|image: '"${DOCKER_IMAGE}"':.*|image: '"${DOCKER_IMAGE}"':'"${IMAGE_TAG}"'|' manifest/deployment.yaml
+
+          git config user.name "jenkins"
+          git config user.email "jenkins@local"
+
+          git add manifest/deployment.yaml
+          # Avoid failing the workflow if there is no change
+          if git diff --cached --quiet; then
+            echo "No changes to manifest/deployment.yaml"
+            exit 0
+          fi
+
+          git commit -m "Update image tag to ${IMAGE_TAG}"
+
+          # Equivalent to:
+          # git push https://${GIT_CREDENTIALS_USR}:${GIT_CREDENTIALS_PSW}@github.com/... HEAD:main
+          git push "https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/yashtnaik/calotracker.git" HEAD:main

@@ -1,0 +1,123 @@
+Here’s a complex Azure DevOps (ADO) pipeline YAML example that demonstrates:
+
+Multiple stages (Build → Test → Deploy)
+Conditional execution
+Variable groups & templates
+Matrix builds for parallel jobs
+Approvals before production deployment
+
+
+Yaml# azure-pipelines.yml
+trigger:
+  branches:
+    include:
+      - main
+      - release/*
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  - group: Common-Variables   # Variable group from Library
+  - name: buildConfiguration
+    value: Release
+
+stages:
+# =========================
+# 1. Build Stage
+# =========================
+- stage: Build
+  displayName: "Build Stage"
+  jobs:
+    - job: BuildJob
+      displayName: "Build Application"
+      pool:
+        vmImage: 'windows-latest'
+      strategy:
+        matrix:
+          net6:
+            DOTNET_VERSION: '6.0.x'
+          net8:
+            DOTNET_VERSION: '8.0.x'
+      steps:
+        - task: UseDotNet@2
+          inputs:
+            packageType: 'sdk'
+            version: $(DOTNET_VERSION)
+
+        - script: dotnet restore
+          displayName: "Restore NuGet Packages"
+
+        - script: dotnet build --configuration $(buildConfiguration)
+          displayName: "Build Solution"
+
+        - publish: $(Build.ArtifactStagingDirectory)
+          artifact: drop
+
+# =========================
+# 2. Test Stage
+# =========================
+- stage: Test
+  displayName: "Test Stage"
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+    - job: UnitTests
+      displayName: "Run Unit Tests"
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - download: current
+          artifact: drop
+
+        - script: dotnet test --configuration $(buildConfiguration) --logger trx
+          displayName: "Run Tests"
+
+        - task: PublishTestResults@2
+          inputs:
+            testResultsFiles: '**/*.trx'
+            testRunTitle: 'Unit Tests'
+
+# =========================
+# 3. Deploy to Staging
+# =========================
+- stage: Deploy_Staging
+  displayName: "Deploy to Staging"
+  dependsOn: Test
+  condition: succeeded()
+  jobs:
+    - deployment: StagingDeployment
+      displayName: "Staging Deployment"
+      environment: 'staging'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: drop
+              - script: echo "Deploying to Staging..."
+              - script: echo "Run smoke tests here"
+
+# =========================
+# 4. Deploy to Production (with Approval)
+# =========================
+- stage: Deploy_Production
+  displayName: "Deploy to Production"
+  dependsOn: Deploy_Staging
+  condition: succeeded()
+  jobs:
+    - deployment: ProductionDeployment
+      displayName: "Production Deployment"
+      environment: 'production'   # Requires manual approval in ADO Environments
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: drop
+              - script: echo "Deploying to Production..."
+              - script: echo "Post-deployment verification"
+
+

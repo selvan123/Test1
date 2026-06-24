@@ -1,0 +1,133 @@
+name: Azure DevOps Migration Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/*'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  buildConfiguration: Release
+  # Azure DevOps variable group Common-Variables must be migrated to GitHub vars/secrets.
+
+jobs:
+  build:
+    name: Build Application (${{ matrix.name }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: net6
+            dotnet-version: 6.0.x
+            artifact-name: drop-net6
+          - name: net8
+            dotnet-version: 8.0.x
+            artifact-name: drop-net8
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3
+        with:
+          dotnet-version: ${{ matrix.dotnet-version }}
+
+      - name: Restore NuGet Packages
+        run: dotnet restore
+
+      - name: Build Solution
+        run: dotnet build --configuration ${{ env.buildConfiguration }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ github.workspace }}
+          if-no-files-found: error
+
+  test:
+    name: Run Unit Tests (${{ matrix.name }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: net6
+            dotnet-version: 6.0.x
+            artifact-name: drop-net6
+          - name: net8
+            dotnet-version: 8.0.x
+            artifact-name: drop-net8
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3
+        with:
+          dotnet-version: ${{ matrix.dotnet-version }}
+
+      - name: Download build artifact
+        uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fe47ea3b2e
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: artifacts/${{ matrix.name }}
+
+      - name: Run Tests
+        run: dotnet test --configuration ${{ env.buildConfiguration }} --logger trx
+
+      - name: Publish test results
+        if: always()
+        uses: dorny/test-reporter@31a54ee7ebcacc03a09ea97a7e5465a47b84aea5
+        with:
+          name: Unit Tests (${{ matrix.name }})
+          path: '**/*.trx'
+          reporter: dotnet-trx
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy_staging:
+    name: Deploy to Staging
+    needs: test
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fe47ea3b2e
+        with:
+          pattern: drop-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Deploy to Staging
+        run: echo "Deploying to Staging..."
+
+      - name: Run smoke tests
+        run: echo "Run smoke tests here"
+
+  deploy_production:
+    name: Deploy to Production
+    needs: deploy_staging
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fe47ea3b2e
+        with:
+          pattern: drop-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Deploy to Production
+        run: echo "Deploying to Production..."
+
+      - name: Post-deployment verification
+        run: echo "Post-deployment verification"
